@@ -1,0 +1,4 @@
+{
+  "best_threshold": 0.2,
+  "val_accuracy_at_threshold": 0.9375
+}
