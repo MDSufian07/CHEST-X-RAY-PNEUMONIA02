@@ -43,15 +43,35 @@ def build_datasets(tf, data_dir: Path):
     val_dir = data_dir / "val"
     test_dir = data_dir / "test"
 
-    train_ds = tf.keras.utils.image_dataset_from_directory(
-        train_dir,
-        labels="inferred",
-        label_mode="binary",
-        image_size=(IMG_SIZE, IMG_SIZE),
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        seed=SEED,
-    )
+    class_names = sorted([item.name for item in train_dir.iterdir() if item.is_dir()])
+
+    def count_images(class_name: str) -> int:
+        return sum(1 for item in (train_dir / class_name).iterdir() if item.is_file())
+
+    def load_image(path, label):
+        image = tf.io.read_file(path)
+        image = tf.io.decode_image(image, channels=3, expand_animations=False)
+        image.set_shape([None, None, 3])
+        image = tf.image.resize(image, (IMG_SIZE, IMG_SIZE))
+        image = tf.cast(image, tf.float32)
+        return image, tf.cast(label, tf.float32)
+
+    def make_class_dataset(class_name: str, label: float, target_count: int):
+        file_paths = sorted([item for item in (train_dir / class_name).iterdir() if item.is_file()])
+        path_ds = tf.data.Dataset.from_tensor_slices([str(path) for path in file_paths])
+        path_ds = path_ds.shuffle(len(file_paths), seed=SEED, reshuffle_each_iteration=True).repeat()
+        label_ds = tf.data.Dataset.from_tensors(tf.cast(label, tf.float32)).repeat()
+        ds = tf.data.Dataset.zip((path_ds, label_ds))
+        ds = ds.map(load_image, num_parallel_calls=tf.data.AUTOTUNE)
+        return ds.take(target_count)
+
+    class_counts = {class_name: count_images(class_name) for class_name in class_names}
+    target_count = max(class_counts.values())
+
+    balanced_train_ds = None
+    for index, class_name in enumerate(class_names):
+        class_ds = make_class_dataset(class_name, float(index), target_count)
+        balanced_train_ds = class_ds if balanced_train_ds is None else balanced_train_ds.concatenate(class_ds)
 
     val_ds = tf.keras.utils.image_dataset_from_directory(
         val_dir,
@@ -71,14 +91,13 @@ def build_datasets(tf, data_dir: Path):
         shuffle=False,
     )
 
-    class_names = train_ds.class_names
-
     autotune = tf.data.AUTOTUNE
-    train_ds = train_ds.cache().shuffle(1000, seed=SEED).prefetch(buffer_size=autotune)
+    train_ds = balanced_train_ds.shuffle(target_count * len(class_names), seed=SEED, reshuffle_each_iteration=True)
+    train_ds = train_ds.batch(BATCH_SIZE).prefetch(buffer_size=autotune)
     val_ds = val_ds.cache().prefetch(buffer_size=autotune)
     test_ds = test_ds.cache().prefetch(buffer_size=autotune)
 
-    return train_ds, val_ds, test_ds, class_names
+    return train_ds, val_ds, test_ds, class_names, class_counts
 
 
 def build_model(tf):
@@ -143,7 +162,7 @@ def main():
 
     tf = get_tensorflow()
 
-    train_ds, val_ds, test_ds, class_names = build_datasets(tf, data_dir)
+    train_ds, val_ds, test_ds, class_names, class_counts = build_datasets(tf, data_dir)
 
     model = build_model(tf)
 
@@ -189,6 +208,7 @@ def main():
 
     print("Training complete.")
     print(f"Classes: {class_names}")
+    print(f"Class counts: {class_counts}")
     print(f"Test metrics: {test_metrics}")
     print(f"Saved artifacts to: {output_dir.resolve()}")
 

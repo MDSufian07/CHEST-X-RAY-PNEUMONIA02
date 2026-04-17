@@ -1,11 +1,11 @@
 {
-  "accuracy": 0.8958333134651184,
-  "auc": 0.9568320512771606,
-  "loss": 0.2789662480354309,
-  "precision": 0.8841607570648193,
-  "recall": 0.9589743614196777,
+  "accuracy": 0.8814102411270142,
+  "auc": 0.9594784379005432,
+  "loss": 0.2989587187767029,
+  "precision": 0.8590909242630005,
+  "recall": 0.9692307710647583,
   "best_threshold": 0.2,
-  "thresholded_accuracy": 0.8397435897435898,
-  "thresholded_precision": 0.8072033896594908,
-  "thresholded_recall": 0.9769230766725838
+  "thresholded_accuracy": 0.8365384615384616,
+  "thresholded_precision": 0.8012552299578963,
+  "thresholded_recall": 0.982051281799474
 }
